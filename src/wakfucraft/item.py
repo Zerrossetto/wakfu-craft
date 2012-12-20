@@ -6,50 +6,87 @@ class Item:
         self.icon=""
         self.acquired=""
         self.stats=""
-        self.level=0
+        self.lvl=0
         self.name=""
         self.type=""
-        self.icon=""
         self.id_elements=0
         
     def __repr__(self):
-        return vars(self).__repr__()
+        return "%5s %30s %21s %3s" % (self.id_elements, self.name, self.icon, self.lvl)
 
 class ItemParser(HTMLParser.HTMLParser):
     
-    def __init__(self):
+    def __init__(self, job, category):
         HTMLParser.HTMLParser.__init__(self)
+        self.job = job
+        self.category = category
         self.recording = False
         self.data = []
         self.item = None
         self.attr_scope = ""
     
-    def handle_starttag(self, tag, attrs):
-        if tag == "table":
-            self.recording = True
-        if self.recording:
-            if tag == "tr":
-                self.item = Item()
-            if tag == "td":
-                self.attr_scope = attrs[0][1]
-            if tag == "a" and self.attr_scope == "item_icon":
-                self.item.id_elements = int( attrs[0][1].split("/")[-1] )
-            if tag == "img":
-                self.item.icon = attrs[0][1]
-                
-    def handle_endtag(self, tag):
-        if tag == "table":
-            self.recording = False
-        if tag == "tr":
-            self.data.append(self.item)
-        if tag == "td":
-            self.attr_scope = ""
+    def __repr__(self):
+        tmp = "%5s %30s %21s %3s %10s %10s" % ("id", "name", "icon", "lvl", "resource", "category")
+        for i in self.data:
+            tmp += "\n%s %10s %10s" % (i, self.job, self.category)
+        return tmp
     
+    def handle_starttag(self, tag, attrs):   
+        if self.recording:
+            try:
+                getattr(self, "start_%s" % tag)(attrs)
+            except AttributeError:
+                pass
+        else: 
+            if tag == "table":
+                self.recording = True 
+
+    def handle_endtag(self, tag):
+        try:
+            getattr(self, "end_%s" % tag)()
+        except AttributeError:
+            pass
+
     def handle_data(self, data):
         if self.recording:
-            if self.attr_scope in ["item_name", "item_aquire"]:
-                dstrip = data.strip()
-                if dstrip:
-                    setattr(self.item, item_table_mapping[self.attr_scope], unicode(dstrip))
-            if self.attr_scope == "item_lvl":
-                self.item.level = int(data)
+            try:
+                getattr(self, "do_%s" % self.attr_scope)(data)
+            except AttributeError:
+                pass
+                
+    def start_tr(self, attrs):
+        self.item = Item()
+    
+    def start_td(self, attrs):
+        scope = [v[5:] for k, v in attrs if k=="class"][0]
+        self.attr_scope = scope
+        
+    def start_a (self, attrs):
+        if self.attr_scope == "icon":
+            href = [v for k, v in attrs if k=="href"][0]
+            self.item.id_elements = int(href.split("/")[-1])
+            
+    def start_img (self, attrs):
+        if self.attr_scope == "icon":
+            src = [v[5:] for k, v in attrs if k=="src"]
+            self.item.icon = src[0]
+    
+    def end_table(self):
+        self.recording = False
+        
+    def end_tr(self):
+        self.data.append(self.item)
+        
+    def end_td(self):
+        self.attr_scope = None
+        
+    def do_name(self, data):
+        dstrip = data.strip()
+        if dstrip:
+            setattr(self.item, self.attr_scope, unicode(dstrip))
+    
+    def do_acquired(self, data):
+        self.do_name(data)
+    
+    def do_lvl(self, data):
+        self.item.lvl = int(data)
