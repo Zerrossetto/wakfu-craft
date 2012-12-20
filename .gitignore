@@ -1,4 +1,4 @@
+*.DS_STORE
 /.git
 /.project
 /.pydevproject
-*.pyc
